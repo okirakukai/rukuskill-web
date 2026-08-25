@@ -43,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // State
   let apiKey = localStorage.getItem('rukuskill_gemini_api_key') || '';
-  let selectedModel = localStorage.getItem('rukuskill_gemini_model') || 'gemini-2.0-flash';
+  let selectedModel = localStorage.getItem('rukuskill_gemini_model') || 'gemini-2.5-flash';
   let activeInputType = 'audio'; // 'audio' or 'text'
   let selectedFile = null;
   let activeOutputTab = 'note';
@@ -232,23 +232,40 @@ document.addEventListener('DOMContentLoaded', () => {
         ];
       }
 
-      // API Request to Gemini
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`;
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: promptParts }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 8192
-          }
-        })
-      });
+      // API Request to Gemini with auto-fallback model list
+      const modelsToTry = Array.from(new Set([selectedModel, 'gemini-2.5-flash', 'gemini-1.5-flash']));
+      let response = null;
+      let lastErrorMsg = '';
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || `API Error: ${response.status}`);
+      for (const modelCandidate of modelsToTry) {
+        try {
+          const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelCandidate}:generateContent?key=${apiKey}`;
+          response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: promptParts }],
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 8192
+              }
+            })
+          });
+
+          if (response.ok) {
+            break;
+          } else {
+            const errorData = await response.json();
+            lastErrorMsg = errorData.error?.message || `API Error: ${response.status}`;
+            console.warn(`Model ${modelCandidate} failed:`, lastErrorMsg);
+          }
+        } catch (e) {
+          lastErrorMsg = e.message;
+        }
+      }
+
+      if (!response || !response.ok) {
+        throw new Error(lastErrorMsg || 'APIへの接続に失敗しました。キーとネットワークをご確認ください。');
       }
 
       const data = await response.json();
