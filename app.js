@@ -193,24 +193,23 @@ document.addEventListener('DOMContentLoaded', () => {
   - note: https://note.com/takumisuzuki
 
 ==================================================
-【出力フォーマット要求】
-必ず以下のマークダウンセクションの区切り文字を厳密に含めて出力してください。
+【必須出力タグルール（必ず以下のセクションタグを単独行で入れて出力してください）】
 
 <<<SECTION:TITLES>>>
-【タイトル案】
-1. インパクト重視: [タイトル1]
-2. 要約・解説風: [タイトル2]
-3. 問いかけ系: [タイトル3]
-4. 情緒・マインド系: [タイトル4]
+【タイトル案 (4系統)】
+1. インパクト重視: ...
+2. 要約・解説風: ...
+3. 問いかけ系: ...
+4. 情緒・マインド系: ...
 
 <<<SECTION:NOTE>>>
-(ここにnote用記事を生成。1500字前後、「##### ■ 見出し」と「====」節切りを使用、細かな改行、最後にCTA添付)
+(note用記事。1500字前後、「##### ■ 見出し」と「====」節切りを使用、節・読点ごとに細かく改行、最後にCTA添付)
 
 <<<SECTION:SUBSTACK>>>
-(ここにSubstack用記事を生成。1500字前後、親密なトーン、「##### ■ 見出し」と「====」節切りを使用、細かな改行、最後にCTA添付)
+(Substack用記事。1500字前後、より親密なコミュニティ向けトーン、「##### ■ 見出し」と「====」節切りを使用、節・読点ごとに細かく改行、最後にCTA添付)
 
 <<<SECTION:SPOTIFY>>>
-(ここにSpotify概要欄用テキストを生成。800字程度、Markdown記法絶対禁止！【タイトル】【内容概要】【■ 聴きどころ】【文章で読む・発信一覧（URL）】で構成)
+(Spotify概要欄用テキスト。800字程度、Markdown記法絶対禁止！【タイトル】【内容概要】【■ 聴きどころ】【文章で読む・発信一覧（URL）】で構成)
 
 <<<SECTION:CHECK>>>
 【文体・匿名チェック結果】
@@ -311,16 +310,51 @@ document.addEventListener('DOMContentLoaded', () => {
       check: ''
     };
 
-    if (rawText.includes('<<<SECTION:TITLES>>>')) {
-      const parts = rawText.split(/<<<SECTION:[A-Z]+>>>/);
-      sections.titles = parts[1] || '';
-      sections.note = parts[2] || '';
-      sections.substack = parts[3] || '';
-      sections.spotify = parts[4] || '';
-      sections.check = parts[5] || '';
+    if (rawText.includes('<<<SECTION:TITLES>>>') || rawText.includes('<<<SECTION:NOTE>>>')) {
+      const getSectionContent = (tag, nextTags) => {
+        const startIndex = rawText.indexOf(`<<<SECTION:${tag}>>>`);
+        if (startIndex === -1) return '';
+        const contentStart = startIndex + `<<<SECTION:${tag}>>>`.length;
+        let minNextIndex = rawText.length;
+        nextTags.forEach(nextTag => {
+          const idx = rawText.indexOf(`<<<SECTION:${nextTag}>>>`, contentStart);
+          if (idx !== -1 && idx < minNextIndex) {
+            minNextIndex = idx;
+          }
+        });
+        return rawText.substring(contentStart, minNextIndex).trim();
+      };
+
+      sections.titles = getSectionContent('TITLES', ['NOTE', 'SUBSTACK', 'SPOTIFY', 'CHECK']);
+      sections.note = getSectionContent('NOTE', ['SUBSTACK', 'SPOTIFY', 'CHECK']);
+      sections.substack = getSectionContent('SUBSTACK', ['SPOTIFY', 'CHECK']);
+      sections.spotify = getSectionContent('SPOTIFY', ['CHECK']);
+      sections.check = getSectionContent('CHECK', []);
     } else {
-      // Fallback simple parsing
-      sections.note = rawText;
+      // Heading-based fallback parsing
+      const blocks = rawText.split(/(?=\n#{1,4}\s+|(?:\r?\n){2,}【)/);
+      let currentKey = 'note';
+
+      blocks.forEach(block => {
+        const lower = block.toLowerCase();
+        if (lower.includes('タイトル') || lower.includes('step 1') || lower.includes('ステップ1')) {
+          sections.titles += block + '\n';
+        } else if (lower.includes('substack') || lower.includes('ステップ3') || lower.includes('step 3')) {
+          currentKey = 'substack';
+          sections.substack += block + '\n';
+        } else if (lower.includes('spotify') || lower.includes('ステップ4') || lower.includes('step 4')) {
+          currentKey = 'spotify';
+          sections.spotify += block + '\n';
+        } else if (lower.includes('チェック') || lower.includes('匿名') || lower.includes('身バレ')) {
+          currentKey = 'check';
+          sections.check += block + '\n';
+        } else if (lower.includes('note') || lower.includes('ステップ2') || lower.includes('step 2')) {
+          currentKey = 'note';
+          sections.note += block + '\n';
+        } else {
+          sections[currentKey] += block + '\n';
+        }
+      });
     }
 
     // Populate Titles
